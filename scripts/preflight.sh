@@ -51,16 +51,18 @@ else
     info "$line"
   done
 
-  # Per-card memory decides which models fit. 96GB and 141GB H20s exist and
-  # differ by 360GB across 8 cards — see docs/hardware.md.
+  # This project is specified around the 96GB H20. The 141GB variant also
+  # exists and differs by 360GB across 8 cards, which invalidates every capacity
+  # number in docs/hardware.md — so flag anything that is not what we ordered.
   mem_mib="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc '0-9')"
   mem_gb=$(( ${mem_mib:-0} / 1024 ))
   if (( mem_gb == 0 )); then
     warn "could not read GPU memory size"
+  elif (( mem_gb >= 85 && mem_gb < 130 )); then
+    pass "per-GPU memory ${mem_gb}GB — 96GB class as expected, total $((mem_gb * gpu_count))GB"
   elif (( mem_gb >= 130 )); then
-    pass "per-GPU memory ${mem_gb}GB — 141GB class, total $((mem_gb * gpu_count))GB"
-  elif (( mem_gb >= 85 )); then
-    pass "per-GPU memory ${mem_gb}GB — 96GB class, total $((mem_gb * gpu_count))GB"
+    warn "per-GPU memory ${mem_gb}GB — this is the 141GB variant, not the 96GB one this project assumes"
+    warn "  total $((mem_gb * gpu_count))GB: more headroom than planned, but re-run the capacity math in docs/hardware.md"
   else
     warn "per-GPU memory ${mem_gb}GB is below the expected H20 range; check the SKU"
   fi
