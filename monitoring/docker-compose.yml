@@ -1,0 +1,40 @@
+# Observability stack. Runs anywhere that can reach the gateway and GPU hosts.
+#
+#   docker compose -f monitoring/docker-compose.yml up -d
+#
+# Grafana starts with no dashboards. Import the vLLM community dashboard
+# (grafana.com dashboard search: "vLLM") as a starting point, then add panels
+# for the H20-specific things worth watching: prefix cache hit rate, and TTFT
+# split out from TPOT — on this hardware they move independently.
+
+name: aqueduct-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "${MONITORING_BIND:-127.0.0.1}:9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    depends_on: [prometheus]
+    ports:
+      - "${MONITORING_BIND:-127.0.0.1}:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+
+volumes:
+  promdata:
+  grafanadata:

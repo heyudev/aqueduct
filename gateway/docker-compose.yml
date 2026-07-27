@@ -1,0 +1,53 @@
+# Gateway stack: LiteLLM proxy + its PostgreSQL.
+# Runs on any ordinary machine — no GPU needed. Reads config from ../.env.
+#
+# Pin ghcr.io/berriai/litellm to a specific tag before production use; the
+# floating tag below is a starting point, not a reproducible deployment.
+
+name: aqueduct-gateway
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${GATEWAY_BIND:-127.0.0.1}:4000:4000"
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aqueduct}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-aqueduct}
+      VLLM_PRIMARY_URL: ${VLLM_PRIMARY_URL:?set VLLM_PRIMARY_URL in .env}
+      VLLM_PRIMARY_URL_2: ${VLLM_PRIMARY_URL_2:-}
+      VLLM_FAST_URL: ${VLLM_FAST_URL:-}
+      VLLM_EMBED_URL: ${VLLM_EMBED_URL:-}
+      VLLM_API_KEY: ${VLLM_API_KEY:?set VLLM_API_KEY in .env}
+      STORE_MODEL_IN_DB: "True"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "4"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/health/liveliness"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aqueduct}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-aqueduct}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aqueduct}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

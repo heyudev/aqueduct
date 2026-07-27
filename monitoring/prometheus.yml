@@ -1,0 +1,38 @@
+# Prometheus scrape config for Aqueduct.
+#
+# Two sources, answering different questions:
+#   vllm    — is the model healthy and how hard is it working?
+#             Key series: vllm:time_to_first_token_seconds,
+#             vllm:time_per_output_token_seconds, vllm:num_requests_running,
+#             vllm:num_requests_waiting, vllm:gpu_cache_usage_perc,
+#             vllm:gpu_prefix_cache_hit_rate
+#   litellm — who is calling, how much, and is the gateway itself healthy?
+#
+# Replace the static targets with the real host addresses. Metric names track
+# the vLLM release in use; if a dashboard panel is empty, curl the /metrics
+# endpoint and check what the current version actually exports.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: vllm
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["10.0.0.1:8000"]
+        labels:
+          instance_role: primary
+          model: aqueduct-chat
+
+  - job_name: litellm
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["10.0.0.2:4000"]
+
+  # GPU-level metrics (utilisation, memory, temperature, power) come from
+  # NVIDIA's DCGM exporter, which is a separate deployment on each GPU host:
+  #   docker run -d --gpus all -p 9400:9400 nvcr.io/nvidia/k8s/dcgm-exporter:latest
+  - job_name: dcgm
+    static_configs:
+      - targets: ["10.0.0.1:9400"]

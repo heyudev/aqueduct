@@ -1,0 +1,23 @@
+# Secrets — never commit. Use .env.example as the template.
+.env
+*.pem
+*.key
+
+# Benchmark output
+bench-results/
+
+# Model weights never belong in git. Weights live in MODEL_DIR, outside the
+# repo; the leading slash keeps this from swallowing inference/vllm/models/,
+# which holds per-model launch configs and must be tracked.
+/models/
+*.safetensors
+*.gguf
+
+# Local editor/OS noise
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+
+# Per-machine Claude Code permissions, not shared
+.claude/settings.local.json

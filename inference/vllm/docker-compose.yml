@@ -1,0 +1,72 @@
+# vLLM inference server. Runs on the GPU machine.
+#
+# Model-specific settings come from an env file under ./models/. Select it with
+# MODEL_ENV, which the Makefile passes through:
+#
+#     make up-model MODEL=primary
+#
+# Pin vllm/vllm-openai to a tested tag before production use.
+
+name: aqueduct-inference
+
+services:
+  vllm:
+    image: vllm/vllm-openai:${VLLM_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      # Bound to localhost by default. Open it to the gateway host only —
+      # never to the whole network, vLLM has no per-caller quota.
+      - "${VLLM_BIND:-127.0.0.1}:${VLLM_PORT:-8000}:8000"
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_HOME: /models/.hf
+      # Explicit V1 engine. Remove once the vLLM release in use no longer
+      # supports V0 — at that point the flag is a no-op.
+      VLLM_USE_V1: "1"
+      # Single machine: everything goes over NVLink, InfiniBand is not involved.
+      NCCL_IB_DISABLE: "1"
+      NCCL_P2P_DISABLE: "0"
+      # Surface NCCL problems instead of hanging silently at startup.
+      NCCL_DEBUG: ${NCCL_DEBUG:-WARN}
+    volumes:
+      - ${MODEL_DIR:?set MODEL_DIR in .env}:/models
+    # Tensor parallelism uses shared memory between the 8 worker processes.
+    # The docker default of 64MB will make startup fail.
+    shm_size: ${SHM_SIZE:-64gb}
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    # Every value below comes from models/<name>.env, which the Makefile sources
+    # into the shell before invoking compose. See that file for the rationale
+    # behind each H20-specific tuning knob.
+    command: >
+      --model ${MODEL_PATH:?set MODEL_PATH via models/<name>.env}
+      --served-model-name ${SERVED_MODEL_NAME:?set SERVED_MODEL_NAME via models/<name>.env}
+      --tensor-parallel-size ${TP_SIZE:-8}
+      --max-model-len ${MAX_MODEL_LEN:-65536}
+      --gpu-memory-utilization ${GPU_MEM_UTIL:-0.92}
+      --max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS:-4096}
+      --max-num-seqs ${MAX_NUM_SEQS:-64}
+      --kv-cache-dtype ${KV_CACHE_DTYPE:-auto}
+      --enable-prefix-caching
+      --enable-chunked-prefill
+      --disable-log-requests
+      --api-key ${VLLM_API_KEY:?set VLLM_API_KEY in .env}
+      --host 0.0.0.0
+      --port 8000
+      ${EXTRA_ARGS:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Loading several hundred GB of weights across 8 GPUs takes a while.
+      start_period: 900s
