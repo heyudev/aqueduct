@@ -18,10 +18,8 @@ services:
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
       DATABASE_URL: postgresql://${POSTGRES_USER:-aqueduct}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-aqueduct}
-      VLLM_PRIMARY_URL: ${VLLM_PRIMARY_URL:?set VLLM_PRIMARY_URL in .env}
-      VLLM_PRIMARY_URL_2: ${VLLM_PRIMARY_URL_2:-}
-      VLLM_FAST_URL: ${VLLM_FAST_URL:-}
-      VLLM_EMBED_URL: ${VLLM_EMBED_URL:-}
+      # Backend addresses live in config.yaml, generated from cluster.yaml.
+      # Only the shared secret is passed through the environment.
       VLLM_API_KEY: ${VLLM_API_KEY:?set VLLM_API_KEY in .env}
       STORE_MODEL_IN_DB: "True"
     volumes:

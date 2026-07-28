@@ -2,7 +2,8 @@
 
 > 目标：让「加一台机器」和「换一个模型」都变成改一行声明，而不是 SSH 上去手工操作。
 >
-> 状态：设计中，未实现。整体架构见 [hld.md](hld.md)。
+> 状态：已实现，见 [`tools/aqctl/`](../../tools/aqctl/)。纯逻辑部分有单元测试（`make test`），
+> **凡是涉及真实机器的路径都未验证**——机器尚未到货。整体架构见 [hld.md](hld.md)。
 
 ## 1. 结论
 
@@ -241,16 +242,30 @@ model_list:
 - **不做灰度发布。** 换模型是替换，不是渐进切流。需要灰度时用不同的 `served_name` 并存，由网关侧控制，见 [lld.md](lld.md) 的模型上线流程。
 - **不管理机器本身。** 装驱动、装 docker、挂载磁盘不在范围内，那是 `scripts/preflight.sh` 检查、由人处理的事。
 
-## 8. 实施步骤
+## 8. 实现
 
-每步都能独立验证，不必等全部做完才有价值：
+工具在 [`tools/aqctl/`](../../tools/aqctl/)，Python 3，依赖只有 PyYAML——docker 操作全部通过 `docker -H ssh://...` 子进程调用，不引入 SDK。
 
-1. **schema 与校验器** —— `models.yaml` / `cluster.yaml` 的定义和 `aqctl validate`。不连机器，纯本地，先把配置结构定死。
-2. **`status` 与 `plan`** —— 只读操作，能连机器查状态并算出 diff。此时已经能回答"集群现在什么样"。
-3. **`apply`** —— 加上创建和删除。到这一步核心价值就有了。
-4. **`gen-gateway`** —— 网关配置生成与重启。
-5. **参数迁移** —— 把 `models/*.env` 的内容搬进 `models.yaml`。
+模块划分的原则是**把决策和 IO 分开**：
 
-工具用 Python 3 写，放在 `tools/aqctl/`。依赖只有 PyYAML——docker 操作全部通过 `docker -H ssh://...` 子进程调用，不引入 SDK。
+| 模块 | 职责 | 有 IO |
+|---|---|---|
+| `config.py` | 解析与校验声明 | 否 |
+| `spec.py` | 声明 → 容器规格 + 指纹 | 否 |
+| `planner.py` | 期望 vs 实际 → 动作列表 | 否 |
+| `gateway.py` | 声明 → LiteLLM model_list | 否 |
+| `remote.py` | 远端 docker 与健康检查 | **是** |
+| `cli.py` | 参数解析与命令编排 | — |
 
-前置条件：控制机能免密 SSH 到所有 GPU 机器，各机器已装 docker 和 nvidia-container-toolkit（`make preflight` 覆盖）。
+决策全在纯函数里，因此不需要 GPU 机器就能测；`remote.py` 刻意保持很薄，因为它是唯一测不了的部分。
+
+### 已验证与未验证
+
+`make test` 覆盖校验规则、diff 算法、容器参数构造、指纹计算、网关生成，共 64 个用例。此外在本机验证过 `validate`、`gen-gateway` 的完整链路，以及机器不可达时的降级行为。
+
+**未验证**：任何真正操作机器的路径——创建容器、删除容器、健康检查轮询、`status` 的指标抓取。这些要等机器到货后按 [../runbook.md](../runbook.md) 逐步验证。
+
+### 前置条件
+
+- 控制机：Python 3 + PyYAML、docker CLI、能免密 SSH 到所有 GPU 机器
+- GPU 机器：docker + nvidia-container-toolkit（`make preflight` 覆盖），**不需要装本项目的任何东西**

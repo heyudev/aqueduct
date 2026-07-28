@@ -1,0 +1,76 @@
+# Cluster declaration — which host runs which models on which GPUs.
+#
+# This file is the source of truth. Change it, then run:
+#
+#   make plan     # see what would change
+#   make apply    # make it so
+#
+# Commit every change: the git history of this file is the deployment history.
+#
+# GPU assignments are declared, not scheduled. See docs/design/orchestration.md
+# for why, and for the rules the validator enforces.
+
+defaults:
+  ssh_user: root
+
+  # Bind-mounted into every container at the same path. Must be fast local
+  # NVMe — weight loading is IO bound.
+  model_dir: /data/models
+
+  # Pin to a tag you have actually tested. `latest` is not reproducible.
+  image: vllm/vllm-openai:latest
+
+  # Where each vLLM instance's port is published on the host. vLLM has no
+  # per-caller quota, so anything that can reach it can saturate the machine —
+  # restrict access to the gateway host with a firewall rule.
+  bind: 0.0.0.0
+
+  # Tensor-parallel workers exchange tensors through shared memory. The docker
+  # default of 64MB makes startup hang with no error.
+  shm_size: 64gb
+
+  # Per-card memory, used to check that a model fits before starting it.
+  gpu_memory_gb: 96
+
+hosts:
+  # ---- machine 1 ----------------------------------------------------------
+  # Address is a placeholder; the machines are still on order.
+  - name: gpu-01
+    address: 10.0.0.11
+    gpu_count: 8
+    deployments:
+      - model: primary
+        gpus: [0, 1, 2, 3, 4, 5, 6, 7]
+        port: 8001
+
+  # ---- machine 2 ----------------------------------------------------------
+  # Uncomment when it arrives. Its first job is removing the single point of
+  # failure by running a second replica of the primary model — not adding
+  # model variety. See the roadmap in docs/design/hld.md.
+  #
+  # - name: gpu-02
+  #   address: 10.0.0.12
+  #   gpu_count: 8
+  #   deployments:
+  #     - model: primary
+  #       gpus: [0, 1, 2, 3, 4, 5, 6, 7]
+  #       port: 8001
+  #
+  # The mixed alternative, once high availability is settled and the small
+  # models are actually needed. Note this leaves the two primary replicas
+  # unbalanced (TP=8 vs TP=4), so the gateway will route unevenly:
+  #
+  # - name: gpu-02
+  #   address: 10.0.0.12
+  #   gpu_count: 8
+  #   deployments:
+  #     - model: primary
+  #       gpus: [0, 1, 2, 3]
+  #       port: 8001
+  #     - model: fast
+  #       gpus: [4, 5]
+  #       port: 8002
+  #     - model: embed
+  #       gpus: [6]
+  #       port: 8003
+  #     # GPU 7 left free as headroom

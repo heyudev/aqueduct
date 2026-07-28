@@ -1,0 +1,38 @@
+# Hand-maintained half of the gateway config: policy, not topology.
+#
+# `aqctl gen-gateway` merges this with a model_list generated from cluster.yaml
+# and writes gateway/config.yaml. Never put model_list here — which models exist
+# and where they run is declared in cluster.yaml.
+#
+# After editing this file: make apply (or aqctl gen-gateway) then
+# make restart-gateway.
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  # Virtual keys are minted through the admin API, never hardcoded here.
+  # Health-check backends so a dead vLLM instance is taken out of rotation.
+  background_health_checks: true
+  health_check_interval: 60
+
+litellm_settings:
+  # vLLM rejects unknown sampling params; drop them instead of 400-ing callers
+  # whose SDK sends OpenAI-only fields. Note this makes unsupported parameters
+  # fail silently — see the parameter matrix in docs/design/lld.md.
+  drop_params: true
+  # Long generations on H20 can legitimately run for minutes.
+  request_timeout: 900
+  num_retries: 2
+  # Only log metadata and token counts. Request and response bodies stay out of
+  # the database — see the security section of docs/design/hld.md.
+  turn_off_message_logging: true
+  # NOTE: the prometheus callback is an enterprise feature in some LiteLLM
+  # releases. If metrics do not appear, fall back to vLLM's own /metrics
+  # endpoint plus usage queries against PostgreSQL. Verify on first deploy.
+  callbacks: ["prometheus"]
+
+router_settings:
+  # Matters once a logical model has more than one backend.
+  routing_strategy: least-busy
+  allowed_fails: 3
+  cooldown_time: 30

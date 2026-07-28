@@ -70,7 +70,7 @@ resp = client.chat.completions.create(
 | `logprobs` | 待定 | 阶段 1 不承诺 |
 | `frequency_penalty` `presence_penalty` | 是 | |
 
-`max_tokens` 未指定时，vLLM 会一直生成到模型自然停止或触及 `MAX_MODEL_LEN`。**要求业务方显式设置**，否则一次跑飞的调用会长时间占用 KV cache 影响所有人。
+`max_tokens` 未指定时，vLLM 会一直生成到模型自然停止或触及 `max_model_len`。**要求业务方显式设置**，否则一次跑飞的调用会长时间占用 KV cache 影响所有人。
 
 ### 1.4 错误码
 
@@ -112,42 +112,49 @@ resp = client.chat.completions.create(
 
 ## 2. 配置项
 
-三处配置，职责不重叠。改任何一处前先确认改的是不是地方。
+四处配置，职责不重叠。改任何一处前先确认改的是不是地方。
 
 | 文件 | 管什么 | 改动后如何生效 |
 |---|---|---|
-| `.env` | 密钥、地址、路径等环境相关值 | 重启对应服务 |
-| `inference/vllm/models/<name>.env` | 单个模型的加载和调度参数 | `make down-model && make up-model` |
-| `gateway/config.yaml` | 逻辑模型到后端的映射、路由与限流策略 | `make restart-gateway` |
+| `cluster.yaml` | 哪台机器、哪几张卡、跑什么模型 | `make apply` |
+| `models.yaml` | 每个模型的加载与调度参数 | `make apply` |
+| `gateway/config.base.yaml` | 网关策略：超时、重试、日志、路由算法 | `make gen-gateway && make restart-gateway` |
+| `.env` | 密钥，以及单机调试路径用的少数变量 | 重启对应服务 |
+
+`gateway/config.yaml` **不在这张表里**——它是 `config.base.yaml` 加 `cluster.yaml` 生成的产物，手工改会在下次 `apply` 时丢失。
+
+编排机制见 [orchestration.md](orchestration.md)。
 
 ### 2.1 环境变量（.env）
 
-完整清单见 [`.env.example`](../../.env.example)，此处只说明容易配错的几项。
+完整清单见 [`.env.example`](../../.env.example)。后端地址不在这里——它们来自 `cluster.yaml`。
 
 | 变量 | 易错点 |
 |---|---|
-| `VLLM_PRIMARY_URL` | 必须是**网关容器**能访问到的地址。同机部署时写宿主机内网 IP，写 `127.0.0.1` 会指向容器自己 |
+| `VLLM_API_KEY` | 网关与 vLLM 之间的共享密钥，`aqctl` 传给它启动的每个实例。轮换它不会触发实例重建 |
 | `GATEWAY_BIND` | 默认 `127.0.0.1` 只监听本机。改成 `0.0.0.0` 前先确认有防火墙限制来源 |
-| `VLLM_BIND` | **不要**改成 `0.0.0.0` 除非有防火墙。vLLM 无配额，直连即可打满机器 |
-| `MODEL_DIR` | 必须在本地 NVMe 上。网络存储会让权重加载时间从几分钟变成一小时 |
-| `SHM_SIZE` | 低于几十 GB 会导致 TP 启动时**无报错挂起** |
-| `VLLM_IMAGE_TAG` | 上线前锁到实测过的版本，不要留 `latest` |
+| `MODEL_DIR` | 仅单机调试路径读取。集群模式用 `cluster.yaml` 的 `model_dir`，两者要保持一致 |
+| `VLLM_IMAGE_TAG` | 同上，集群模式用 `cluster.yaml` 的 `image`。上线前锁到实测过的版本 |
 
 ### 2.2 模型参数
 
-以 [`inference/vllm/models/primary.env`](../../inference/vllm/models/primary.env) 为例。每一项都给了取值依据，调整时按依据判断，不要凭感觉试。
+在 [`models.yaml`](../../models.yaml) 里，一个模型一条记录。每一项都给了取值依据，调整时按依据判断，不要凭感觉试。
 
-| 参数 | 起始值 | 依据 | 调整方向 |
+| 字段 | 起始值 | 依据 | 调整方向 |
 |---|---|---|---|
-| `TP_SIZE` | 8 | 单机 GPU 数，NVLink 全互联 | 不要超过实际卡数 |
-| `GPU_MEM_UTIL` | 0.92 | 留 8% 给 CUDA context 和 NCCL 缓冲 | 上调需谨慎，OOM 会在压测中途才出现 |
-| `MAX_MODEL_LEN` | 65536 | 通用场景够用，且不过度挤占 KV cache | 有真实长文需求再加，加完重新测并发 |
-| `KV_CACHE_DTYPE` | fp8 | KV 显存减半，换来约两倍并发 | 质量回归发现劣化就改回 `auto` |
-| `MAX_NUM_BATCHED_TOKENS` | 4096 | **H20 关键参数**，见下 | 见下 |
-| `MAX_NUM_SEQS` | 64 | 调度器准入上限，防止超发 | 实测 KV cache 有余量再加 |
-| `EXTRA_ARGS` | `--enable-expert-parallel` | MoE 专家分散到多卡而非复制 | 稠密模型时去掉 |
+| `gpus` | 8 | 同时是 TP 数，必须是 1/2/4/8 | 与 `cluster.yaml` 里分配的卡数必须一致，校验器会查 |
+| `weight_gb` | 235 | FP8 权重约等于参数量×1 字节 | 下载后用 `du -sh` 核对；校验器用它判断放不放得下 |
+| `gpu_memory_utilization` | 0.92 | 留 8% 给 CUDA context 和 NCCL 缓冲 | 上调需谨慎，OOM 会在压测中途才出现 |
+| `max_model_len` | 65536 | 通用场景够用，且不过度挤占 KV cache | 有真实长文需求再加，加完重新测并发 |
+| `kv_cache_dtype` | fp8 | KV 显存减半，换来约两倍并发 | 质量回归发现劣化就改回 `auto` |
+| `max_num_batched_tokens` | 4096 | **H20 关键参数**，见下 | 见下 |
+| `max_num_seqs` | 64 | 调度器准入上限，防止超发 | 实测 KV cache 有余量再加 |
+| `extra_args` | `--enable-expert-parallel` | MoE 专家分散到多卡而非复制 | 稠密模型时去掉 |
+| `health_timeout` | 2400 | 几百 GB 权重加载可能要半小时 | 太短会把正常加载判成失败 |
 
-**`MAX_NUM_BATCHED_TOKENS` 为什么是 4096**
+改这里的任何一项都会改变实例指纹，`apply` 时该实例被重建——单副本即服务中断。
+
+**`max_num_batched_tokens` 为什么是 4096**
 
 这个参数控制每个调度步骤处理多少 token。H100 配置里常见 8192–16384，直接照抄到 H20 上是错的：H20 算力只有 H100 的约 1/7，同样大小的块要算 7 倍长的时间，而在这个块算完之前，所有正在解码的请求都在等。
 
@@ -157,16 +164,16 @@ resp = client.chat.completions.create(
 
 ### 2.3 网关配置
 
-`gateway/config.yaml` 的结构：
+生成的 `gateway/config.yaml` 有四段，来源不同：
 
 ```yaml
-model_list:          # 逻辑模型 → 后端映射，同名多条即自动负载均衡
-general_settings:    # 主密钥、数据库、健康检查
-litellm_settings:    # 全局行为：超时、重试、日志、回调
-router_settings:     # 路由策略、故障摘除
+model_list:          # 生成：逻辑模型 → 后端映射，同名多条即自动负载均衡
+general_settings:    # 来自 config.base.yaml：主密钥、数据库、健康检查
+litellm_settings:    # 来自 config.base.yaml：超时、重试、日志、回调
+router_settings:     # 来自 config.base.yaml：路由策略、故障摘除
 ```
 
-加一个后端副本 = 在 `model_list` 里加一条 `model_name` 相同、`api_base` 不同的条目。加一个新模型 = 加一条 `model_name` 不同的条目。就这两种操作。
+`model_list` 由 `cluster.yaml` 生成，不要手工加条目——加副本是在 `cluster.yaml` 里加机器，加模型是在 `models.yaml` 加定义再在 `cluster.yaml` 里分配卡位。其余三段手工维护在 `config.base.yaml`。
 
 ## 3. 容量计算
 
@@ -176,11 +183,11 @@ router_settings:     # 路由策略、故障摘除
 
 ```
 单卡显存 × 卡数 = 总显存
-总显存 × GPU_MEM_UTIL = vLLM 可用
+总显存 × gpu_memory_utilization = vLLM 可用
 vLLM 可用 - 模型权重 = KV cache 可用
 ```
 
-以 8×96GB、`GPU_MEM_UTIL=0.92`、235B 模型 FP8 为例：
+以 8×96GB、`gpu_memory_utilization: 0.92`、235B 模型 FP8 为例：
 
 ```
 768 GB × 0.92 = 706 GB  可用
@@ -197,7 +204,7 @@ FP8 权重大小约等于「参数量 × 1 字节」。实际下载后用 `du -s
 bytes/token = 2 × num_kv_heads × head_dim × num_layers × dtype_bytes
 ```
 
-`2` 是 K 和 V 两份。前四个参数从模型仓库的 `config.json` 里读：`num_key_value_heads`、`hidden_size / num_attention_heads`（即 head_dim，部分模型直接给 `head_dim`）、`num_hidden_layers`。`dtype_bytes` 在 `KV_CACHE_DTYPE=fp8` 时是 1，`auto`（bf16）时是 2。
+`2` 是 K 和 V 两份。前四个参数从模型仓库的 `config.json` 里读：`num_key_value_heads`、`hidden_size / num_attention_heads`（即 head_dim，部分模型直接给 `head_dim`）、`num_hidden_layers`。`dtype_bytes` 在 `kv_cache_dtype: fp8` 时是 1，`auto`（bf16）时是 2。
 
 算例，假设 94 层、4 个 KV head、head_dim 128、FP8：
 
@@ -344,7 +351,7 @@ PostgreSQL 由 LiteLLM 管理表结构，我们不直接建表。关心的是三
 | 服务不可用 | 网关健康检查失败持续 2 分钟 | 立即处理，查网关与后端状态 |
 | 无健康后端 | 503 比例 > 10% 持续 5 分钟 | 推理层挂了或正在重启，查 `make logs-model` |
 | 排队积压 | `num_requests_waiting` 持续 > N | 容量不够，需要扩容或限流 |
-| KV cache 打满 | `gpu_cache_usage_perc` > 95% 持续 5 分钟 | 同上，先临时调小 `MAX_MODEL_LEN` 缓解 |
+| KV cache 打满 | `gpu_cache_usage_perc` > 95% 持续 5 分钟 | 同上，先临时调小 `max_model_len` 缓解 |
 | 首 token 劣化 | TTFT P99 超过基线 2 倍 | 查前缀缓存命中率是否掉了 |
 | 缓存命中率骤降 | 命中率相对日常基线下降过半 | 多半是某个业务方改了提示词模板 |
 | 单 key 用量异常 | 某 key 小时用量超其日常均值 10 倍 | 大概率是死循环，联系业务方 |
@@ -360,7 +367,7 @@ PostgreSQL 由 LiteLLM 管理表结构，我们不直接建表。关心的是三
 |---|---|---|
 | 全部请求 503 | vLLM 挂了或在重启 | `make logs-model` 看是否 OOM |
 | 启动后一直不就绪，无报错 | 共享内存不足，TP worker 挂起 | 查 `SHM_SIZE` 和宿主机 `/dev/shm` |
-| 首 token 特别慢 | 前缀缓存没命中，或 `MAX_NUM_BATCHED_TOKENS` 过大 | 看命中率指标 |
+| 首 token 特别慢 | 前缀缓存没命中，或 `max_num_batched_tokens` 过大 | 看命中率指标 |
 | 并发一上来就排队 | KV cache 不够 | 看 `gpu_cache_usage_perc`，按 §3.2 重算容量 |
 | 报 model not found | 逻辑名与 `--served-model-name` 不一致 | 比对两处配置 |
 | 401 但 key 是对的 | key 已过期或被吊销 | 查数据库中该 key 状态 |
@@ -395,7 +402,7 @@ PostgreSQL 由 LiteLLM 管理表结构，我们不直接建表。关心的是三
 
 ### 8.3 模型质量回归
 
-换模型、改量化设置（尤其 `KV_CACHE_DTYPE`）之后必须做，否则容量优化可能是拿质量换的。
+换模型、改量化设置（尤其 `kv_cache_dtype`）之后必须做，否则容量优化可能是拿质量换的。
 
 方法务实即可：**攒一组 30–50 条内部真实场景的样例**，覆盖主要用途（问答、改写、工具调用、长文档理解），新旧模型各跑一遍，人工比对。不需要学术 benchmark——公开榜单分数高不代表在你的场景上好用。
 

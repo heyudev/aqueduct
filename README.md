@@ -37,6 +37,9 @@ resp = client.chat.completions.create(
 ## 目录
 
 ```
+cluster.yaml           集群声明：哪台机器、哪几张卡、跑什么模型
+models.yaml            模型注册表：每个模型怎么跑
+tools/aqctl/           把实际状态收敛到声明的 CLI
 docs/
   design/hld.md            概要设计：架构、选型理由、非功能设计、演进路线
   design/lld.md            详细设计：接口契约、配置项、容量计算、故障处理、测试
@@ -51,13 +54,21 @@ scripts/               上机体检、模型下载、冒烟测试、压测、签
 
 ## 快速开始
 
-机器到货后，在 GPU 机器上：
+机器到货后，先在 GPU 机器上体检：
 
 ```bash
 make preflight
 ```
 
-体检通过后按 [docs/runbook.md](docs/runbook.md) 走。先起推理，再起网关，最后 `make smoke` 验证端到端。
+通过后，在控制机上编辑 `cluster.yaml` 填真实地址，然后：
+
+```bash
+make validate && make plan && make apply
+```
+
+`apply` 会起容器、等健康检查、生成网关配置。再 `make up-gateway`，最后 `make smoke` 验证端到端。完整步骤见 [docs/runbook.md](docs/runbook.md)。
+
+日常的加机器、换模型也是同一个动作：改 `cluster.yaml` 或 `models.yaml`，`make plan` 看清楚，`make apply`。
 
 ## 先读哪份文档
 

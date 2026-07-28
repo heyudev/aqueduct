@@ -14,6 +14,8 @@ define with_env
 set -a; . ./.env; . $(MODEL_ENV); set +a;
 endef
 
+AQCTL := python3 tools/aqctl
+
 .PHONY: help
 help: ## Show this help
 	@echo "Aqueduct — internal LLM inference service"
@@ -21,8 +23,38 @@ help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
 	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@echo
-	@echo "Model configs available (pass as MODEL=<name>):"
-	@ls inference/vllm/models/*.env 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.env$$/  /' | sed 's/^/  /' || true
+	@echo "Day-to-day: edit cluster.yaml, then 'make plan' and 'make apply'."
+
+# ---- cluster (the normal way to run models) --------------------------------
+
+.PHONY: validate
+validate: ## Check cluster.yaml + models.yaml; contacts no machines
+	@$(AQCTL) validate
+
+.PHONY: status
+status: check-env ## What is actually running, per host and per GPU
+	@$(AQCTL) status
+
+.PHONY: plan
+plan: check-env ## Show what apply would change
+	@$(AQCTL) plan
+
+.PHONY: apply
+apply: check-env ## Make the cluster match cluster.yaml
+	@$(AQCTL) apply
+
+.PHONY: gen-gateway
+gen-gateway: check-env ## Regenerate gateway/config.yaml from the declaration
+	@$(AQCTL) gen-gateway
+
+.PHONY: logs
+logs: check-env ## Tail one instance: make logs HOST=gpu-01 MODEL=primary
+	@test -n "$(HOST)" || { echo "usage: make logs HOST=<host> MODEL=<model>"; exit 1; }
+	@$(AQCTL) logs $(HOST) $(MODEL) -f
+
+.PHONY: test
+test: ## Run the aqctl unit tests
+	@python3 -m unittest discover -s tools/aqctl/tests -t tools/aqctl
 
 .PHONY: preflight
 preflight: ## Check the GPU host is ready (run this first on new hardware)
@@ -34,21 +66,26 @@ env: ## Create .env from the template
 	@cp .env.example .env
 	@echo "Created .env — fill in the secrets before starting anything."
 
-# ---- inference layer (GPU machine) ----------------------------------------
+# ---- single-host debugging -------------------------------------------------
+#
+# These run one vLLM container on THIS machine from inference/vllm/models/*.env,
+# bypassing the cluster declaration. Use them to verify a freshly delivered
+# machine can serve at all, before adding it to cluster.yaml. For anything
+# else use plan/apply — two ways of starting the same model will diverge.
 
 .PHONY: up-model
-up-model: check-env ## Start vLLM with MODEL=<name> (default: primary)
+up-model: check-env ## [debug] Start one vLLM on this host from MODEL=<name>.env
 	@test -f $(MODEL_ENV) || { echo "no such model config: $(MODEL_ENV)"; exit 1; }
 	@echo "Starting vLLM with $(MODEL_ENV)"
 	@$(with_env) $(INFRA) up -d
 	@echo "Loading weights takes several minutes. Follow with: make logs-model"
 
 .PHONY: down-model
-down-model: ## Stop vLLM
+down-model: ## [debug] Stop the local vLLM
 	@$(with_env) $(INFRA) down
 
 .PHONY: logs-model
-logs-model: ## Tail vLLM logs
+logs-model: ## [debug] Tail the local vLLM logs
 	@$(with_env) $(INFRA) logs -f --tail=200
 
 .PHONY: wait-model

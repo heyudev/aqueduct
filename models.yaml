@@ -1,0 +1,72 @@
+# Model registry — how each model should be served.
+#
+# Adding a model means adding an entry here; no code changes. Which host runs
+# it is declared separately in cluster.yaml.
+#
+# Tuning values are shaped by H20's profile (weak compute, high memory
+# bandwidth). See docs/hardware.md for why they differ from H100 defaults.
+# None of them are measured yet — re-tune after `make bench` on real hardware.
+
+models:
+  # --- primary general-purpose model, occupies a whole host ----------------
+  primary:
+    # Absolute path on the GPU host. Must live under the host's model_dir,
+    # which is bind-mounted into the container at the same path.
+    # Verify the exact upstream repo before downloading; model releases move
+    # fast and this name may be out of date.
+    path: /data/models/Qwen3-235B-A22B-Instruct-2507-FP8
+
+    # What callers see, and what the gateway routes on.
+    served_name: aqueduct-chat
+
+    # Also the tensor-parallel size. Must be 1, 2, 4 or 8.
+    gpus: 8
+
+    # FP8 weights are roughly one byte per parameter. Used to check the config
+    # fits before anything is started.
+    weight_gb: 235
+
+    max_model_len: 65536
+
+    # Halves KV cache memory versus fp16, roughly doubling concurrency at a
+    # small quality cost. Set to `auto` if evaluation shows regressions.
+    kv_cache_dtype: fp8
+
+    # H20 has ~1/7 of H100's compute, so the 8192-16384 common in H100 configs
+    # makes each scheduler step too slow and starves decoding.
+    max_num_batched_tokens: 4096
+
+    max_num_seqs: 64
+    gpu_memory_utilization: 0.92
+
+    # Distributes MoE experts across GPUs instead of replicating them.
+    extra_args: ["--enable-expert-parallel"]
+
+    # Several hundred GB of weights can take half an hour to load. A shorter
+    # timeout would report a healthy instance as failed.
+    health_timeout: 2400
+
+  # --- small model for high-frequency simple tasks -------------------------
+  # Not deployed yet; waiting on a second machine. See cluster.yaml.
+  fast:
+    path: /data/models/Qwen3-30B-A3B-Instruct-FP8
+    served_name: aqueduct-fast
+    gpus: 2
+    weight_gb: 30
+    max_model_len: 32768
+    kv_cache_dtype: fp8
+    max_num_batched_tokens: 8192
+    max_num_seqs: 128
+    gpu_memory_utilization: 0.90
+    health_timeout: 900
+
+  # --- embeddings ----------------------------------------------------------
+  embed:
+    path: /data/models/Qwen3-Embedding-8B
+    served_name: aqueduct-embed
+    gpus: 1
+    weight_gb: 16
+    # Pooling models take no context-length or scheduling flags.
+    task: embedding
+    gpu_memory_utilization: 0.85
+    health_timeout: 600
