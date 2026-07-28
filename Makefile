@@ -7,6 +7,8 @@ MODEL_ENV := inference/vllm/models/$(MODEL).env
 
 INFRA := docker compose --project-directory inference/vllm -f inference/vllm/docker-compose.yml
 GW    := docker compose --project-directory gateway -f gateway/docker-compose.yml --env-file .env
+# The bundled PostgreSQL is skipped when DATABASE_URL points elsewhere.
+DB_PROFILE = $(shell grep -qE '^DATABASE_URL=.+' .env 2>/dev/null || echo '--profile builtin-db')
 
 # Model settings are sourced into the shell so docker compose can interpolate
 # them; compose only reads the shell environment and the project .env file.
@@ -107,13 +109,13 @@ wait-model: check-env ## Block until vLLM answers /health (up to 30 min)
 # ---- gateway layer ---------------------------------------------------------
 
 .PHONY: up-gateway
-up-gateway: check-env ## Start LiteLLM proxy and PostgreSQL
-	@$(GW) up -d
+up-gateway: check-env ## Start LiteLLM proxy (and PostgreSQL unless external)
+	@$(GW) $(DB_PROFILE) up -d
 	@echo "Gateway starting on port 4000."
 
 .PHONY: down-gateway
 down-gateway: ## Stop the gateway (data in the pgdata volume is kept)
-	@$(GW) down
+	@$(GW) $(DB_PROFILE) down
 
 .PHONY: logs-gateway
 logs-gateway: ## Tail gateway logs
@@ -136,6 +138,10 @@ bench: ## Load test the inference layer directly
 .PHONY: key
 key: check-env ## Mint an API key: make key TEAM=search BUDGET=100
 	@./scripts/mint-key.sh
+
+.PHONY: backup
+backup: check-env ## Back up the gateway database
+	@./scripts/backup-db.sh
 
 .PHONY: usage
 usage: check-env ## Show spend per key

@@ -188,5 +188,16 @@ class AddressingTest(unittest.TestCase):
         self.assertEqual(spec_for("primary").container, "aqueduct-primary-8001")
 
 
+
+class LogRotationTest(unittest.TestCase):
+    def test_container_logs_are_capped(self):
+        # Docker's json-file driver never rotates by itself. An instance that
+        # runs for months would otherwise fill the host disk with its own
+        # logs, and a full disk fails in ways that look unrelated to logging.
+        args = list(spec_for("primary").run_args)
+        opts = [args[i + 1] for i, a in enumerate(args) if a == "--log-opt"]
+        self.assertIn("max-size=100m", opts)
+        self.assertIn("max-file=3", opts)
+
 if __name__ == "__main__":
     unittest.main()

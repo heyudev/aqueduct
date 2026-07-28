@@ -13,6 +13,14 @@ services:
   vllm:
     image: vllm/vllm-openai:${VLLM_IMAGE_TAG:-latest}
     restart: unless-stopped
+    # Docker's default json-file driver never rotates. A long-running
+    # container fills the disk with its own logs, and a full disk takes the
+    # service down in a way that looks like anything but a logging problem.
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
     ports:
       # Bound to localhost by default. Open it to the gateway host only —
       # never to the whole network, vLLM has no per-caller quota.

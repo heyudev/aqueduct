@@ -13,6 +13,14 @@ services:
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
+    # Docker's default json-file driver never rotates. A long-running
+    # container fills the disk with its own logs, and a full disk takes the
+    # service down in a way that looks like anything but a logging problem.
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
     ports:
       - "${MONITORING_BIND:-127.0.0.1}:9090:9090"
     volumes:
@@ -25,6 +33,14 @@ services:
   grafana:
     image: grafana/grafana:latest
     restart: unless-stopped
+    # Docker's default json-file driver never rotates. A long-running
+    # container fills the disk with its own logs, and a full disk takes the
+    # service down in a way that looks like anything but a logging problem.
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
     depends_on: [prometheus]
     ports:
       - "${MONITORING_BIND:-127.0.0.1}:3000:3000"

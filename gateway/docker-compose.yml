@@ -10,14 +10,27 @@ services:
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     restart: unless-stopped
+    # Docker's default json-file driver never rotates. A long-running
+    # container fills the disk with its own logs, and a full disk takes the
+    # service down in a way that looks like anything but a logging problem.
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
     depends_on:
       postgres:
         condition: service_healthy
+        # Absent when the builtin-db profile is off, i.e. using external PG.
+        required: false
     ports:
       - "${GATEWAY_BIND:-127.0.0.1}:4000:4000"
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-aqueduct}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-aqueduct}
+      # Defaults to the bundled container. Point DATABASE_URL at a managed
+      # PostgreSQL instead and the bundled one is never started — see the
+      # builtin-db profile below.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-aqueduct}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-aqueduct}}
       # Backend addresses live in config.yaml, generated from cluster.yaml.
       # Only the shared secret is passed through the environment.
       VLLM_API_KEY: ${VLLM_API_KEY:?set VLLM_API_KEY in .env}
@@ -35,6 +48,18 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Only started when the builtin-db profile is active. `make up-gateway`
+    # activates it unless DATABASE_URL is set, so pointing at a managed
+    # PostgreSQL simply skips this container.
+    profiles: ["builtin-db"]
+    # Docker's default json-file driver never rotates. A long-running
+    # container fills the disk with its own logs, and a full disk takes the
+    # service down in a way that looks like anything but a logging problem.
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-aqueduct}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}

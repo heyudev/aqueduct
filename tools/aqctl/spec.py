@@ -147,6 +147,10 @@ def build(host, dep, model, api_key):
         "--shm-size", host.shm_size,
         "--ulimit", "memlock=-1",
         "--ulimit", "stack=67108864",
+        # json-file never rotates on its own; without a cap a long-lived
+        # instance eventually fills the host disk with its own logs.
+        "--log-opt", "max-size=100m",
+        "--log-opt", "max-file=3",
         "-p", "%s:%d:8000" % (host.bind, dep.port),
         "-v", mount,
         "-e", "VLLM_USE_V1=1",
