@@ -1,0 +1,490 @@
+/* Aqueduct console.
+ *
+ * Colour roles come from the project's data-visualisation palette. Dark mode is
+ * a selected set of steps for the dark surface, not an inversion of the light
+ * one. Status colours are reserved — they never stand in for a series, and they
+ * always ship with a text label, because two of them sit below 3:1 contrast on
+ * the light surface and colour alone would not carry the meaning.
+ */
+
+:root {
+  color-scheme: light;
+
+  --surface:        #fcfcfb;
+  --plane:          #f9f9f7;
+  --ink:            #0b0b0b;
+  --ink-secondary:  #52514e;
+  --ink-muted:      #898781;
+  --gridline:       #e1e0d9;
+  --axis:           #c3c2b7;
+  --border:         rgba(11, 11, 11, 0.10);
+
+  --series-1:       #2a78d6;
+
+  --good:           #0ca30c;
+  --warning:        #fab219;
+  --serious:        #ec835a;
+  --critical:       #d03b3b;
+
+  --radius:   10px;
+  --radius-s: 6px;
+  --gap:      16px;
+
+  --font: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface:       #1a1a19;
+    --plane:         #0d0d0d;
+    --ink:           #ffffff;
+    --ink-secondary: #c3c2b7;
+    --ink-muted:     #898781;
+    --gridline:      #2c2c2a;
+    --axis:          #383835;
+    --border:        rgba(255, 255, 255, 0.10);
+    --series-1:      #3987e5;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface:       #1a1a19;
+  --plane:         #0d0d0d;
+  --ink:           #ffffff;
+  --ink-secondary: #c3c2b7;
+  --ink-muted:     #898781;
+  --gridline:      #2c2c2a;
+  --axis:          #383835;
+  --border:        rgba(255, 255, 255, 0.10);
+  --series-1:      #3987e5;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; }
+code { font-family: var(--mono); font-size: 0.92em; }
+
+/* ---- top bar -------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font-size: 17px; letter-spacing: -0.01em; }
+.brand-sub { color: var(--ink-muted); font-size: 13px; }
+
+.brand-mark {
+  width: 9px; height: 18px;
+  align-self: center;
+  border-radius: 2px;
+  background: linear-gradient(var(--series-1), transparent);
+}
+
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+/* Links out to the systems this console deliberately does not reimplement. */
+.ext-links { display: flex; gap: 6px; }
+.ext-link {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  padding: 3px 9px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ext-link:hover { color: var(--ink); border-color: var(--axis); }
+.ext-link::after { content: " ↗"; color: var(--ink-muted); }
+
+.freshness {
+  display: flex; align-items: center; gap: 7px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  /* Without this the timestamp collapses into a column of single characters
+   * as soon as the bar runs out of room. */
+  white-space: nowrap;
+}
+
+.dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ink-muted);
+  flex: none;
+}
+.dot.live   { background: var(--good); }
+.dot.stale  { background: var(--warning); }
+.dot.broken { background: var(--critical); }
+
+.icon-button {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 9px;
+}
+.icon-button:hover { color: var(--ink); border-color: var(--axis); }
+
+/* ---- tabs ----------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font: inherit;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--series-1);
+  font-weight: 600;
+}
+
+main { padding: 20px 24px 48px; max-width: 1180px; margin: 0 auto; }
+
+/* ---- cards and stat tiles ------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: var(--gap);
+}
+.card h2 { font-size: 14px; margin-bottom: 10px; }
+
+.lede { color: var(--ink-secondary); margin: 0 0 12px; max-width: 76ch; }
+.note { color: var(--ink-muted); font-size: 13px; margin: 10px 0 0; }
+
+.callout {
+  border-left: 3px solid var(--series-1);
+  color: var(--ink-secondary);
+}
+.callout strong { color: var(--ink); }
+.callout.attention { border-left-color: var(--warning); }
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.stat-label {
+  color: var(--ink-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.stat-value {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+.stat-value .unit { font-size: 15px; font-weight: 400; color: var(--ink-muted); }
+.stat-sub { color: var(--ink-secondary); font-size: 12px; }
+
+/* ---- hosts and GPU grid --------------------------------------------- */
+
+.host-list { display: flex; flex-direction: column; gap: var(--gap); }
+
+.host {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.host-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.host-name { font-size: 14px; font-weight: 600; }
+.host-addr {
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.gpu-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 16px 18px 4px;
+}
+
+/* One tile per card. The 2px gap between tiles is the surface showing
+ * through, so adjacent occupied cards never read as one block. */
+.gpu {
+  /* Grows with its label rather than truncating it — a tile reading "非…"
+   * tells the reader nothing. */
+  min-width: 56px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 6px 7px 5px;
+  text-align: center;
+  background: var(--plane);
+}
+.gpu-id {
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.gpu-bar {
+  height: 4px;
+  border-radius: 2px;
+  margin: 4px 8px 3px;
+  background: var(--axis);
+}
+.gpu-tag {
+  font-size: 10px;
+  color: var(--ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gpu.free .gpu-tag { color: var(--ink-muted); }
+.gpu.running  .gpu-bar { background: var(--good); }
+.gpu.stale_config .gpu-bar { background: var(--warning); }
+.gpu.stopped  .gpu-bar { background: var(--critical); }
+.gpu.not_deployed .gpu-bar { background: var(--serious); }
+.gpu.unknown  .gpu-bar { background: var(--axis); }
+.gpu.undeclared .gpu-bar { background: var(--serious); }
+.gpu.undeclared { border-style: dashed; }
+
+.instances { padding: 8px 18px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+.instance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 16px;
+  align-items: center;
+  padding: 11px 0 0;
+  border-top: 1px solid var(--gridline);
+}
+.instance:first-child { border-top: none; padding-top: 2px; }
+
+.instance-main { min-width: 0; }
+.instance-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.instance-model { font-weight: 600; }
+.arrow { color: var(--ink-muted); }
+.served { font-family: var(--mono); font-size: 12px; color: var(--ink-secondary); }
+
+.instance-meta {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.instance-meta .sep { opacity: 0.5; padding: 0 5px; }
+
+.instance-right { display: flex; align-items: center; gap: 14px; }
+
+/* Status is a coloured chip plus its label — never colour alone. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.status::before {
+  content: "";
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  flex: none;
+}
+.status.good::before     { background: var(--good); }
+.status.warning::before  { background: var(--warning); }
+.status.serious::before  { background: var(--serious); }
+.status.critical::before { background: var(--critical); }
+
+.meter {
+  width: 92px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--gridline);
+  overflow: hidden;
+}
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--series-1);
+}
+
+.spark { display: block; }
+
+.host-error {
+  margin: 0;
+  padding: 12px 18px 16px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+}
+.host-error code {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.undeclared {
+  margin: 0 18px 16px;
+  padding: 10px 12px;
+  border: 1px dashed var(--axis);
+  border-radius: var(--radius-s);
+  color: var(--ink-secondary);
+  font-size: 12px;
+}
+
+/* ---- tables ---------------------------------------------------------- */
+
+.table-wrap { overflow-x: auto; }
+
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td {
+  text-align: left;
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--gridline);
+  vertical-align: top;
+}
+th {
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+td.num { font-variant-numeric: tabular-nums; text-align: right; padding-right: 20px; }
+th.num { text-align: right; padding-right: 20px; }
+tbody tr:last-child td { border-bottom: none; }
+
+.pill {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--ink-secondary);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 1px 8px;
+  margin: 0 4px 3px 0;
+}
+
+.support-yes { color: var(--ink); }
+.support-partial, .support-unconfirmed { color: var(--ink-secondary); }
+.support-no { color: var(--ink-muted); text-decoration: line-through; }
+
+.code {
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  color: var(--ink-secondary);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  margin: 0;
+  overflow-x: auto;
+  padding: 14px 16px;
+}
+.code .k { color: var(--series-1); }
+
+.empty {
+  color: var(--ink-muted);
+  padding: 22px 0;
+  text-align: center;
+}
+
+.metric-card { margin-bottom: var(--gap); }
+.metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.metric-title { font-weight: 600; }
+.metric-host { color: var(--ink-muted); font-size: 12px; }
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--gap);
+  margin-top: 12px;
+}
+.metric-cell { min-width: 0; }
+.metric-label { color: var(--ink-muted); font-size: 12px; }
+.metric-now {
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+@media (max-width: 720px) {
+  main, .topbar, .tabs { padding-left: 14px; padding-right: 14px; }
+  .instance { grid-template-columns: 1fr; }
+  .instance-right { justify-content: flex-start; flex-wrap: wrap; }
+  .brand-sub { display: none; }
+
+  /* Let the bar wrap instead of crushing its contents: brand and freshness
+   * on the first line, the outbound links on the second. */
+  .topbar { flex-wrap: wrap; row-gap: 10px; }
+  .topbar-right { flex: 1 1 100%; justify-content: space-between; }
+  .ext-links { order: 2; }
+}

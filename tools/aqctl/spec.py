@@ -36,6 +36,17 @@ class InstanceSpec:
     spec_hash: str
 
     @property
+    def uid(self):
+        """Cluster-unique id for this instance.
+
+        The container name alone is NOT unique: it is aqueduct-<model>-<port>,
+        so replicas of one model on two hosts share it. Anything keyed per
+        instance — health, metrics, time series — must key on this, or one
+        replica silently overwrites the other.
+        """
+        return "%s/%s" % (self.host_name, self.container)
+
+    @property
     def health_url(self):
         return "http://%s:%d/health" % (self.host_address, self.port)
 

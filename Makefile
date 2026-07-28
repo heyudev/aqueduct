@@ -47,6 +47,10 @@ apply: check-env ## Make the cluster match cluster.yaml
 gen-gateway: check-env ## Regenerate gateway/config.yaml from the declaration
 	@$(AQCTL) gen-gateway
 
+.PHONY: console
+console: check-env ## Read-only web console on :8080 (make console PORT=9000)
+	@$(AQCTL) serve --port $(or $(PORT),8080) --bind $(or $(BIND),127.0.0.1)
+
 .PHONY: logs
 logs: check-env ## Tail one instance: make logs HOST=gpu-01 MODEL=primary
 	@test -n "$(HOST)" || { echo "usage: make logs HOST=<host> MODEL=<model>"; exit 1; }

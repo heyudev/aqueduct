@@ -14,6 +14,7 @@ make plan         # what apply would change
 make apply        # make it so
 make gen-gateway  # regenerate gateway/config.yaml
 make logs HOST=gpu-01 MODEL=primary
+make console      # read-only web console on :8080
 ```
 
 Directly, when you need non-default paths:
@@ -42,6 +43,10 @@ Nothing is installed on the GPU hosts — all remote work goes through
 | `planner.py` | Desired vs actual → actions. Pure. |
 | `gateway.py` | Declaration → LiteLLM model list. Pure. |
 | `remote.py` | The only module that does IO. Deliberately thin. |
+| `views.py` | Collected data → the console's JSON. Pure. |
+| `collector.py` | Background polling into an in-memory snapshot. |
+| `server.py` | Read-only HTTP console. Standard library only. |
+| `web/` | The console's HTML/CSS/JS. No build step, no CDN. |
 | `cli.py` | Argument parsing and command bodies. |
 
 Decisions live in the pure modules so they can be tested without a GPU machine;
@@ -54,6 +59,10 @@ make test
 ```
 
 Covers validation rules, the diff algorithm, container spec construction, spec
-hashing, and gateway generation. The SSH and docker calls in `remote.py` are not
-covered — only its output parsing is. **Anything involving a real host is
-unverified until the machines arrive.**
+hashing, gateway generation, and the console's view shaping. The SSH and docker
+calls in `remote.py` are not covered — only its output parsing is. **Anything
+involving a real host is unverified until the machines arrive.**
+
+The console was checked against fabricated state covering every render path
+(healthy, stale config, stopped, undeployed, unreachable host, undeclared
+container, budget overrun) in both themes and at mobile width.

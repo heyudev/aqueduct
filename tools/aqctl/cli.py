@@ -318,6 +318,57 @@ def cmd_gen_gateway(args):
     return 0
 
 
+def cmd_serve(args):
+    import collector as collector_mod
+    import server as server_mod
+
+    cluster = load_cluster(args)
+    specs = spec_mod.build_all(cluster, api_key(args))
+    env = read_env(args.env)
+
+    gateway = args.gateway or env.get("AQ_URL") or "http://127.0.0.1:4000"
+    master_key = os.environ.get("LITELLM_MASTER_KEY") or env.get("LITELLM_MASTER_KEY")
+
+    # Everything this console deliberately does not do gets a link instead of a
+    # reimplementation. Absent config simply hides the link.
+    links = {}
+    grafana = args.grafana or env.get("GRAFANA_URL")
+    if grafana:
+        links["grafana"] = grafana
+    if master_key:
+        links["gateway_admin"] = gateway.rstrip("/") + "/ui"
+
+    if not master_key:
+        print("LITELLM_MASTER_KEY not set — the usage tab will be empty.",
+              file=sys.stderr)
+
+    collector = collector_mod.Collector(
+        cluster, specs, gateway_url=gateway, master_key=master_key)
+    print("Collecting initial state...")
+    collector.collect_containers()
+    collector.collect_health()
+    collector.start()
+
+    httpd = server_mod.serve(
+        cluster, specs, collector, gateway.rstrip("/") + "/v1",
+        links=links, bind=args.bind, port=args.port)
+
+    shown = "127.0.0.1" if args.bind in ("0.0.0.0", "") else args.bind
+    print("Console on http://%s:%d  (read-only; changes go through apply)"
+          % (shown, args.port))
+    if args.bind == "0.0.0.0":
+        print("Listening on all interfaces — restrict access with a firewall.",
+              file=sys.stderr)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping.")
+    finally:
+        collector.stop()
+        httpd.server_close()
+    return 0
+
+
 def cmd_logs(args):
     cluster = load_cluster(args)
     for host in cluster.hosts:
@@ -359,6 +410,12 @@ def build_parser():
 
     sub.add_parser("gen-gateway", help="regenerate the gateway config")
 
+    serve_parser = sub.add_parser("serve", help="read-only web console")
+    serve_parser.add_argument("--bind", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8080)
+    serve_parser.add_argument("--gateway", help="gateway base URL (default: AQ_URL)")
+    serve_parser.add_argument("--grafana", help="Grafana URL, shown as a link")
+
     logs_parser = sub.add_parser("logs", help="tail one instance's logs")
     logs_parser.add_argument("host")
     logs_parser.add_argument("model")
@@ -374,6 +431,7 @@ COMMANDS = {
     "plan": cmd_plan,
     "apply": cmd_apply,
     "gen-gateway": cmd_gen_gateway,
+    "serve": cmd_serve,
     "logs": cmd_logs,
 }
 

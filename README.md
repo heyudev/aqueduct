@@ -39,7 +39,7 @@ resp = client.chat.completions.create(
 ```
 cluster.yaml           集群声明：哪台机器、哪几张卡、跑什么模型
 models.yaml            模型注册表：每个模型怎么跑
-tools/aqctl/           把实际状态收敛到声明的 CLI
+tools/aqctl/           把实际状态收敛到声明的 CLI，以及只读控制台
 docs/
   design/hld.md            概要设计：架构、选型理由、非功能设计、演进路线
   design/lld.md            详细设计：接口契约、配置项、容量计算、故障处理、测试
@@ -70,6 +70,8 @@ make validate && make plan && make apply
 
 日常的加机器、换模型也是同一个动作：改 `cluster.yaml` 或 `models.yaml`，`make plan` 看清楚，`make apply`。
 
+想看集群现在什么样，`make console` 起一个只读的网页控制台（默认 `127.0.0.1:8080`）：每台机器每张卡在跑什么、实例是否健康、实时负载，以及给业务方看的模型接入说明。
+
 ## 先读哪份文档
 
 | 你要做的事 | 读这份 |
@@ -77,7 +79,7 @@ make validate && make plan && make apply
 | 决定买什么机器、跑什么模型 | [docs/hardware.md](docs/hardware.md) |
 | 理解整体架构和技术选型的取舍 | [docs/design/hld.md](docs/design/hld.md) |
 | 接入这个 API，或要改配置、定容量 | [docs/design/lld.md](docs/design/lld.md) |
-| 加机器、上下线模型 | [docs/design/orchestration.md](docs/design/orchestration.md) |
+| 加机器、上下线模型、看控制台 | [docs/design/orchestration.md](docs/design/orchestration.md) |
 | 动手部署或值班排障 | [docs/runbook.md](docs/runbook.md) |
 
 概要设计面向所有人，一页看懂这是什么；详细设计面向研发、测试和运维，细到能照着实施。

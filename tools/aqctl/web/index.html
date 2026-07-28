@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aqueduct 控制台</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <h1>Aqueduct</h1>
+    <span class="brand-sub">推理集群控制台</span>
+  </div>
+
+  <div class="topbar-right">
+    <nav class="ext-links" id="ext-links" aria-label="外部系统"></nav>
+    <div class="freshness" id="freshness" role="status" aria-live="polite">
+      <span class="dot" id="conn-dot" aria-hidden="true"></span>
+      <span id="conn-text">连接中…</span>
+    </div>
+    <button type="button" id="theme-toggle" class="icon-button" title="切换主题"
+            aria-label="切换深色/浅色主题">◐</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" class="tab" data-tab="cluster" aria-selected="true">集群</button>
+  <button role="tab" class="tab" data-tab="models"  aria-selected="false">模型接入</button>
+  <button role="tab" class="tab" data-tab="usage"   aria-selected="false">用量</button>
+</nav>
+
+<main>
+  <!-- ---------------------------------------------------------------- -->
+  <section class="panel" id="panel-cluster" role="tabpanel">
+    <div class="stat-row" id="cluster-stats"></div>
+    <div id="cluster-hosts" class="host-list"></div>
+  </section>
+
+  <!-- ---------------------------------------------------------------- -->
+  <section class="panel" id="panel-models" role="tabpanel" hidden>
+    <div class="card">
+      <h2>怎么调用</h2>
+      <p class="lede">
+        任何会用 OpenAI SDK 的系统，改 <code>base_url</code> 和 <code>api_key</code> 即可接入。
+        <code>model</code> 填下表里的逻辑名，背后跑哪个开源模型由平台决定，可能随时更换。
+      </p>
+      <pre class="code" id="snippet"></pre>
+      <p class="note">
+        需要 API key 找平台侧签发。key 绑定可访问的模型和用量配额，只显示一次。
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>可用模型</h2>
+      <div id="models-table"></div>
+    </div>
+
+    <div class="card">
+      <h2>参数支持</h2>
+      <p class="lede">
+        网关会丢弃不支持的参数而不是报错，<strong>被丢弃的参数是静默失效的</strong>——
+        不要依赖下表标为「不支持」的字段。
+      </p>
+      <div id="params-table"></div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------------- -->
+  <section class="panel" id="panel-usage" role="tabpanel" hidden>
+    <div class="card callout" id="usage-note">
+      <strong>这里只看「谁用得异常」</strong>，是只读摘要。签发和吊销 key
+      用 <code>scripts/mint-key.sh</code>，完整账目和管理动作在网关自带的管理界面。
+    </div>
+    <div class="stat-row" id="usage-stats"></div>
+    <div id="usage-attention"></div>
+    <div class="card">
+      <h2>各 key 用量</h2>
+      <div id="usage-table"></div>
+    </div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

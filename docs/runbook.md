@@ -141,6 +141,14 @@ make status
 
 每台机器每张卡的占用、实例状态、在途请求数、KV cache 使用率。配置漂移会标成 `STALE CONFIG`，声明里已删除但还在跑的会标成 `UNDECLARED`。
 
+要在浏览器里看同样的信息，外加实时负载曲线和给业务方的接入说明：
+
+```bash
+make console
+```
+
+只读，改不了任何东西——变更一律走 `cluster.yaml` 加 `apply`。默认只监听本机，要给同事看就 `make console BIND=0.0.0.0`，前提是有防火墙。
+
 **换模型**：改 `models.yaml` 里该模型的 `path`，`make apply`。业务方无感知——他们调的是 `aqueduct-chat` 这个逻辑名。**单副本时这会中断服务**，`plan` 会明确警告，权重重新加载要几十分钟。
 
 **调参数**：改 `models.yaml` 里的 `max_model_len`、`kv_cache_dtype` 等，`make apply`。同样会重建实例。
