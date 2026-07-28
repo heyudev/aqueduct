@@ -13,30 +13,12 @@ model_list:
 - model_name: aqueduct-chat
   litellm_params:
     model: openai/aqueduct-chat
-    api_base: http://host.docker.internal:8001/v1
+    api_base: http://10.0.0.11:8001/v1
     api_key: os.environ/VLLM_API_KEY
     input_cost_per_token: 0.001
     output_cost_per_token: 0.003
   model_info:
-    aqueduct_host: localhost
-- model_name: aqueduct-embed
-  litellm_params:
-    model: openai/aqueduct-embed
-    api_base: http://host.docker.internal:8003/v1
-    api_key: os.environ/VLLM_API_KEY
-    input_cost_per_token: 5.0e-05
-    output_cost_per_token: 5.0e-05
-  model_info:
-    aqueduct_host: localhost
-- model_name: aqueduct-fast
-  litellm_params:
-    model: openai/aqueduct-fast
-    api_base: http://host.docker.internal:8002/v1
-    api_key: os.environ/VLLM_API_KEY
-    input_cost_per_token: 0.0001
-    output_cost_per_token: 0.0003
-  model_info:
-    aqueduct_host: localhost
+    aqueduct_host: gpu-01
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   database_url: os.environ/DATABASE_URL
