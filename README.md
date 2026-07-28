@@ -38,10 +38,11 @@ resp = client.chat.completions.create(
 
 ```
 docs/
-  design/hld.md        概要设计：架构、选型理由、非功能设计、演进路线
-  design/lld.md        详细设计：接口契约、配置项、容量计算、故障处理、测试
-  hardware.md          H20 硬件特性与模型选型矩阵（采购决策依据）
-  runbook.md           部署步骤与日常运维
+  design/hld.md            概要设计：架构、选型理由、非功能设计、演进路线
+  design/lld.md            详细设计：接口契约、配置项、容量计算、故障处理、测试
+  design/orchestration.md  集群编排设计：声明式的机器伸缩与模型部署
+  hardware.md              H20 硬件特性与模型选型矩阵（采购决策依据）
+  runbook.md               部署步骤与日常运维
 gateway/               LiteLLM 网关：compose 与配置
 inference/vllm/        vLLM 推理服务：compose 与各模型启动参数
 monitoring/            Prometheus 抓取配置与 Grafana 面板
@@ -65,6 +66,7 @@ make preflight
 | 决定买什么机器、跑什么模型 | [docs/hardware.md](docs/hardware.md) |
 | 理解整体架构和技术选型的取舍 | [docs/design/hld.md](docs/design/hld.md) |
 | 接入这个 API，或要改配置、定容量 | [docs/design/lld.md](docs/design/lld.md) |
+| 加机器、上下线模型 | [docs/design/orchestration.md](docs/design/orchestration.md) |
 | 动手部署或值班排障 | [docs/runbook.md](docs/runbook.md) |
 
 概要设计面向所有人，一页看懂这是什么；详细设计面向研发、测试和运维，细到能照着实施。
