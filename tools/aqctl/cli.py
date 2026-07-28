@@ -330,13 +330,20 @@ def cmd_serve(args):
     master_key = os.environ.get("LITELLM_MASTER_KEY") or env.get("LITELLM_MASTER_KEY")
 
     # Everything this console deliberately does not do gets a link instead of a
-    # reimplementation. Absent config simply hides the link.
+    # reimplementation.
+    #
+    # Every link must be configured explicitly — none are inferred. A guessed
+    # URL that happens to resolve sends people somewhere unrelated: a port that
+    # looks like Grafana's default may well be another team's service, and the
+    # reader has no way to tell the console guessed. An absent link is a much
+    # smaller problem than a confidently wrong one.
     links = {}
     grafana = args.grafana or env.get("GRAFANA_URL")
     if grafana:
         links["grafana"] = grafana
-    if master_key:
-        links["gateway_admin"] = gateway.rstrip("/") + "/ui"
+    admin = args.gateway_admin or env.get("GATEWAY_ADMIN_URL")
+    if admin:
+        links["gateway_admin"] = admin
 
     if not master_key:
         print("LITELLM_MASTER_KEY not set — the usage tab will be empty.",
@@ -415,6 +422,8 @@ def build_parser():
     serve_parser.add_argument("--port", type=int, default=8080)
     serve_parser.add_argument("--gateway", help="gateway base URL (default: AQ_URL)")
     serve_parser.add_argument("--grafana", help="Grafana URL, shown as a link")
+    serve_parser.add_argument("--gateway-admin",
+                              help="gateway admin UI URL, shown as a link")
 
     logs_parser = sub.add_parser("logs", help="tail one instance's logs")
     logs_parser.add_argument("host")
