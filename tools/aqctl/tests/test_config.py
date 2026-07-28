@@ -194,5 +194,28 @@ class ValidationTest(unittest.TestCase):
         self.assertErrorMatching(build(cluster=doc), "duplicate host name")
 
 
+
+class NominalCostTest(unittest.TestCase):
+    """Budgets only work if models have a price — see config.DEFAULT_COST_*."""
+
+    def test_models_get_a_positive_default_price(self):
+        models = cfg.parse_models(models_doc())
+        self.assertGreater(models["primary"].cost_per_1k_input, 0)
+        self.assertGreater(models["primary"].cost_per_1k_output, 0)
+
+    def test_output_costs_more_than_input(self):
+        # Decoding occupies the GPU far longer than prefill does.
+        m = cfg.parse_models(models_doc())["primary"]
+        self.assertGreater(m.cost_per_1k_output, m.cost_per_1k_input)
+
+    def test_explicit_price_overrides_the_default(self):
+        models = cfg.parse_models(models_doc(cost_per_1k_input=5.0))
+        self.assertEqual(models["primary"].cost_per_1k_input, 5.0)
+
+    def test_zero_price_is_rejected(self):
+        # A model priced at zero accrues no spend, so its budget never fires.
+        errors = cfg.validate(build(models_doc(cost_per_1k_input=0)))
+        self.assertTrue(any("never accrues" in e for e in errors), errors)
+
 if __name__ == "__main__":
     unittest.main()

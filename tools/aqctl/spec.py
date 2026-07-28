@@ -34,6 +34,8 @@ class InstanceSpec:
     image: str
     run_args: Tuple[str, ...]
     spec_hash: str
+    cost_per_1k_input: float = 0.0
+    cost_per_1k_output: float = 0.0
 
     @property
     def uid(self):
@@ -172,6 +174,8 @@ def build(host, dep, model, api_key):
         image=host.image,
         run_args=tuple(run_args),
         spec_hash=digest,
+        cost_per_1k_input=model.cost_per_1k_input,
+        cost_per_1k_output=model.cost_per_1k_output,
     )
 
 

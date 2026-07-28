@@ -28,6 +28,15 @@ MIN_KV_CACHE_GB = 40.0
 DEFAULT_GPU_MEMORY_GB = 96.0
 DEFAULT_MEMORY_UTIL = 0.92
 DEFAULT_HEALTH_TIMEOUT = 900
+# Self-hosted inference has no per-call dollar cost, but LiteLLM only accrues
+# spend — and therefore only enforces budgets — when a model has a price. With
+# no price, spend stays 0.0 forever and the budget silently never fires, which
+# defeats the one thing it is there for: stopping a runaway caller. So models
+# carry a NOMINAL unit cost. Read a budget as "thousands of input tokens".
+# Output is dearer than input because decoding occupies the GPU far longer.
+DEFAULT_COST_PER_1K_INPUT = 1.0
+DEFAULT_COST_PER_1K_OUTPUT = 3.0
+
 DEFAULT_IMAGE = "vllm/vllm-openai:latest"
 DEFAULT_SSH_USER = "root"
 DEFAULT_MODEL_DIR = "/data/models"
@@ -55,6 +64,8 @@ class Model:
     task: Optional[str] = None
     extra_args: tuple = ()
     health_timeout: int = DEFAULT_HEALTH_TIMEOUT
+    cost_per_1k_input: float = DEFAULT_COST_PER_1K_INPUT
+    cost_per_1k_output: float = DEFAULT_COST_PER_1K_OUTPUT
 
 
 @dataclass(frozen=True)
@@ -140,6 +151,10 @@ def parse_models(data, source="models.yaml"):
             task=spec.get("task"),
             extra_args=tuple(str(a) for a in extra),
             health_timeout=int(spec.get("health_timeout", DEFAULT_HEALTH_TIMEOUT)),
+            cost_per_1k_input=float(
+                spec.get("cost_per_1k_input", DEFAULT_COST_PER_1K_INPUT)),
+            cost_per_1k_output=float(
+                spec.get("cost_per_1k_output", DEFAULT_COST_PER_1K_OUTPUT)),
         )
     return models
 
@@ -224,6 +239,11 @@ def validate(cluster):
         if not 0 < model.gpu_memory_utilization <= 1:
             errors.append(
                 "model '%s': gpu_memory_utilization must be in (0, 1]" % model.key
+            )
+        if model.cost_per_1k_input <= 0 or model.cost_per_1k_output <= 0:
+            errors.append(
+                "model '%s': nominal costs must be positive, otherwise spend "
+                "never accrues and its budget never fires" % model.key
             )
         if model.task is None and model.max_model_len is None:
             errors.append(

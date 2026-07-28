@@ -11,11 +11,14 @@ import remote  # noqa: E402
 
 
 class FakeSpec(object):
-    def __init__(self, served_name, host_name, address, port):
+    def __init__(self, served_name, host_name, address, port,
+                 cost_in=1.0, cost_out=3.0):
         self.served_name = served_name
         self.host_name = host_name
         self.host_address = address
         self.port = port
+        self.cost_per_1k_input = cost_in
+        self.cost_per_1k_output = cost_out
 
     @property
     def api_base(self):
@@ -67,6 +70,16 @@ class RenderTest(unittest.TestCase):
             doc["model_list"][0]["litellm_params"]["api_key"],
             "os.environ/VLLM_API_KEY",
         )
+
+    def test_models_carry_a_price_so_budgets_can_fire(self):
+        # LiteLLM only accrues spend for priced models. Without a price, every
+        # key's spend stays 0.0 and its budget never triggers — which silently
+        # removes the one guard against a runaway caller.
+        doc = self.render([FakeSpec("aqueduct-chat", "gpu-01", "10.0.0.11", 8001,
+                                    cost_in=2.0, cost_out=6.0)])
+        params = doc["model_list"][0]["litellm_params"]
+        self.assertEqual(params["input_cost_per_token"], 0.002)
+        self.assertEqual(params["output_cost_per_token"], 0.006)
 
     def test_generated_file_is_marked_as_such(self):
         text = gateway.render([FakeSpec("aqueduct-chat", "g", "10.0.0.11", 1)], BASE)

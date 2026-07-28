@@ -177,10 +177,12 @@ function renderCluster(data) {
   stats.appendChild(statTile("GPU 占用", `${s.gpus_used}/${s.gpus_total}`, "",
     `${s.gpus_total - s.gpus_used} 张空闲`));
 
-  const inflight = data.hosts.reduce((sum, h) =>
-    sum + h.instances.reduce((n, i) => n + (i.metrics.running || 0), 0), 0);
-  const queued = data.hosts.reduce((sum, h) =>
-    sum + h.instances.reduce((n, i) => n + (i.metrics.waiting || 0), 0), 0);
+  // vLLM reports these as float gauges, so summing them accumulates float
+  // error — "16.799999999999997 requests in flight" is not a thing.
+  const inflight = Math.round(data.hosts.reduce((sum, h) =>
+    sum + h.instances.reduce((n, i) => n + (i.metrics.running || 0), 0), 0));
+  const queued = Math.round(data.hosts.reduce((sum, h) =>
+    sum + h.instances.reduce((n, i) => n + (i.metrics.waiting || 0), 0), 0));
   stats.appendChild(statTile("在途请求", inflight, "",
     queued > 0 ? `${queued} 个排队中` : "无排队"));
 
@@ -291,7 +293,7 @@ function renderInstance(inst) {
     const load = el("div", "metric-cell");
     load.appendChild(el("div", "metric-label", "在途 / 排队"));
     load.appendChild(el("div", "instance-meta",
-      `${m.running || 0} / ${m.waiting || 0}`));
+      `${Math.round(m.running || 0)} / ${Math.round(m.waiting || 0)}`));
     if (window_.length > 1) {
       load.appendChild(sparkline(window_.map((p) => p.values.running || 0), 108, 24));
     }

@@ -29,6 +29,10 @@ HEADER = """\
 def build_model_list(specs):
     """One entry per instance. Same served_name across entries means LiteLLM
     load-balances between them, which is exactly how replicas should behave.
+
+    The per-token costs are nominal — self-hosted inference has no per-call
+    price. They exist because LiteLLM only accrues spend for priced models, and
+    a key whose spend never moves is a key whose budget never fires.
     """
     entries = []
     for spec in sorted(specs, key=lambda s: (s.served_name, s.host_name, s.port)):
@@ -36,6 +40,8 @@ def build_model_list(specs):
             "model": "openai/%s" % spec.served_name,
             "api_base": spec.api_base,
             "api_key": "os.environ/VLLM_API_KEY",
+            "input_cost_per_token": spec.cost_per_1k_input / 1000.0,
+            "output_cost_per_token": spec.cost_per_1k_output / 1000.0,
         }
         entry = {
             "model_name": spec.served_name,

@@ -15,6 +15,8 @@ model_list:
     model: openai/aqueduct-chat
     api_base: http://10.0.0.11:8001/v1
     api_key: os.environ/VLLM_API_KEY
+    input_cost_per_token: 0.001
+    output_cost_per_token: 0.003
   model_info:
     aqueduct_host: gpu-01
 general_settings:

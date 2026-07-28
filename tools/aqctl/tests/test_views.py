@@ -279,9 +279,6 @@ class UsageViewTest(unittest.TestCase):
         self.assertEqual(data["keys"][0]["alias"], "(unnamed)")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class UndeclaredGpuTest(unittest.TestCase):
     """A container outside the declaration still holds its cards."""
@@ -325,3 +322,17 @@ class UndeclaredGpuTest(unittest.TestCase):
         self.assertEqual(views.parse_gpu_label(" 4 , 5 "), [4, 5])
         self.assertEqual(views.parse_gpu_label("all"), [])
         self.assertEqual(views.parse_gpu_label(None), [])
+
+
+class MetricRoundingTest(unittest.TestCase):
+    """vLLM reports request counts as float gauges."""
+
+    def test_float_gauges_survive_the_view_layer(self):
+        # The view passes them through; rounding is the renderer's job, but the
+        # values must arrive intact so it has something to round.
+        _, _, data = view(metrics={"gpu-01/aqueduct-primary-8001":
+                                   {"running": 5.6, "waiting": 0.0}})
+        self.assertAlmostEqual(instance(data, "primary")["metrics"]["running"], 5.6)
+
+if __name__ == "__main__":
+    unittest.main()

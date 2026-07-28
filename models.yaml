@@ -6,6 +6,14 @@
 # Tuning values are shaped by H20's profile (weak compute, high memory
 # bandwidth). See docs/hardware.md for why they differ from H100 defaults.
 # None of them are measured yet — re-tune after `make bench` on real hardware.
+#
+# cost_per_1k_input / cost_per_1k_output are NOMINAL units, not money. Running
+# our own GPUs has no per-call price, but the gateway only accrues spend for
+# models that have one — and a key whose spend never moves is a key whose
+# budget never fires. Since stopping a runaway caller is the entire point of
+# those budgets, every model carries a price. Read a budget of 200 as
+# "200k input tokens". Both default to 1.0 / 3.0 if omitted; output costs more
+# because decoding occupies the GPU far longer than prefill does.
 
 models:
   # --- primary general-purpose model, occupies a whole host ----------------
@@ -46,6 +54,11 @@ models:
     # timeout would report a healthy instance as failed.
     health_timeout: 2400
 
+    # The flagship costs more per token than the small model, so a team's
+    # budget reflects which model they actually lean on.
+    cost_per_1k_input: 1.0
+    cost_per_1k_output: 3.0
+
   # --- small model for high-frequency simple tasks -------------------------
   # Not deployed yet; waiting on a second machine. See cluster.yaml.
   fast:
@@ -59,6 +72,9 @@ models:
     max_num_seqs: 128
     gpu_memory_utilization: 0.90
     health_timeout: 900
+    # An order of magnitude cheaper — that is the reason this model exists.
+    cost_per_1k_input: 0.1
+    cost_per_1k_output: 0.3
 
   # --- embeddings ----------------------------------------------------------
   embed:
@@ -70,3 +86,6 @@ models:
     task: embedding
     gpu_memory_utilization: 0.85
     health_timeout: 600
+    # Embedding calls have no output tokens; the output price never applies.
+    cost_per_1k_input: 0.05
+    cost_per_1k_output: 0.05
